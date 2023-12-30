@@ -127,6 +127,21 @@ class Database {
      
     async createFunctions() {      
         this.client.functionManager.createFunction({
+            name: "$deleteVar",
+            type: "djs",
+            code: async (d) => {
+                const data = await d.util.aoiFunc(d);
+                const [variable, table = "default"] = data.inside.splits;
+
+                await d.client.db.drop(table, variable);
+
+                data.result = ""
+
+                return {
+                    code: d.util.setCode(data),
+                };
+            },
+        }, {
             name: "$setUserVar",
             type: "djs",
             code: async (d) => {
@@ -134,6 +149,8 @@ class Database {
                 const [variable, value, table = "default", userId = d.author?.id, guildId = d.guild?.id ] = data.inside.splits;
 
                 await d.client.db.set(table, variable, value, guildId, userId);
+
+                data.result = "";
 
                 return {
                     code: d.util.setCode(data),
@@ -161,6 +178,8 @@ class Database {
 
                 await d.client.db.set(table, variable, value, guildId);
 
+                data.result = "";
+
                 return {
                     code: d.util.setCode(data),
                 };
@@ -185,7 +204,9 @@ class Database {
                 const data = await d.util.aoiFunc(d);
                 const [variable, value, table = "default", userId = d.author?.id ] = data.inside.splits;
 
-                data.result = await d.client.db.set(table, variable, value, null, userId);
+                await d.client.db.set(table, variable, value, null, userId);
+
+                data.result = "";
 
                 return {
                     code: d.util.setCode(data),
@@ -211,7 +232,9 @@ class Database {
                 const data = await d.util.aoiFunc(d);
                 const [variable, value, table = "default" ] = data.inside.splits;
 
-                data.result = await d.client.db.set(table, variable, value);
+                await d.client.db.set(table, variable, value);
+
+                data.result = "";
 
                 return {
                     code: d.util.setCode(data),
@@ -237,7 +260,9 @@ class Database {
                 const data = await d.util.aoiFunc(d);
                 const [variable, value, table = "default", channelId = d.channel?.id ] = data.inside.splits;
 
-                data.result = await d.client.db.set(table, variable, value, null, null, null, channelId);
+                await d.client.db.set(table, variable, value, null, null, null, channelId);
+
+                data.result = "";
 
                 return {
                     code: d.util.setCode(data),
@@ -263,7 +288,9 @@ class Database {
                 const data = await d.util.aoiFunc(d);
                 const [variable, value, table = "default", messageId = d.message?.id ] = data.inside.splits;
 
-                data.result = await d.client.db.set(table, variable, value, null, null, messageId);
+                await d.client.db.set(table, variable, value, null, null, messageId);
+
+                data.result = "";
 
                 return {
                     code: d.util.setCode(data),
@@ -507,10 +534,6 @@ class Database {
             code: async (d) => {
                 const { Time } = require("aoi.js/src/utils/helpers/customParser")
                 const data = await d.util.aoiFunc(d);
-                //set(table, variable, data, guildId, userId, messageId, channelId)
-                //get(table, variable, guildId, userId, messageId, channelId)
-                //drop(table, collection)
-                //delete(table, variable, value, guildId, userId, messageId, channelId
                 let [time, error, table = "cooldown"] = data.inside.splits;
                 if (!d.command?.name) return d.aoiError.fnError(d, "custom", {}, `Command name not found`);
 
@@ -567,6 +590,35 @@ class Database {
                 return {
                     code: d.util.setCode(data),
                     error
+                };
+            },
+        }, {
+            name: "$getCooldownTime",
+            type: "djs",
+            code: async (d) => {
+                const data = await d.util.aoiFunc(d);
+                const [command, type, resolveId, table = "cooldown"] = data.inside.splits;
+
+                let cooldown;
+
+                if (type === "channel") {
+                    cooldown = await d.client.db.get(table, command, null, null, null, resolveId) || undefined
+                } else if (type === "user") {
+                    cooldown = await d.client.db.get(table, command, null, resolveId) || undefined
+                } else if (type === "guild") {
+                    cooldown = await d.client.db.get(table, command, resolveId) || undefined
+                } else {
+                    return d.aoiError.fnError(d, "custom", { inside: data.inside }, `type`);
+                }
+
+                if (!cooldown) {
+                    data.result = 0;
+                } else {
+                    data.result = cooldown?._v
+                }
+            
+                return {
+                    code: d.util.setCode(data)
                 };
             },
         });
