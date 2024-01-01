@@ -8,7 +8,7 @@ To get started with aoi.js-mongo, we have to do a couple things.
 
 - Install the package.
 ```bash
-npm install https://github.com/Faf4a/aoi.js-mongo
+npm install aoi.js-mongo@latest
 ```
 
 - Update your index.js file.
