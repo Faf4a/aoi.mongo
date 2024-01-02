@@ -443,7 +443,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                let [variable, table = "default", varType = "global", resolveId = d.author?.id, format = "value"] = data.inside.splits;
+                let [variable, table = "default", varType = "global", position = "1", format = "value"] = data.inside.splits;
             
                 let type;
                 if (varType === "global") {
@@ -471,14 +471,22 @@ class Database {
 
                 let lb_data = await d.client.db.findMany(table, variable, type);
                 lb_data = lb_data.sort((a, b) => b._v - a._v);
+
+                if (lb_data.length === 0 || !lb_data) return d.aoiError.fnError(d, "custom", { inside: data.inside }, `lb_data`);
                 
-                const key = varType === "guild" ? "_guildId" : "_userId";
+                format = format.toLowerCase()
+
+                if (position === "last") position = lb_data.length - 1 
 
                 try {
                     if (format === "position") {
-                        data.result = lb_data.findIndex(obj => obj[key] === resolveId) + 1;
+                        data.result = position;
                     } else if (format === "value") {
-                        data.result = lb_data.filter(obj => obj[key] === resolveId)[0]._v;
+                        data.result = lb_data[Number(position) - 1]._v
+                    } else if (format === "username") {
+                        data.result = (await d.util.getUser(d, lb_data[Number(position) - 1]._userId))?.username
+                    } else if (format === "userid") {
+                        data.result = (await d.util.getUser(d, lb_data[Number(position) - 1]._userId))?.username
                     } else {
                         return d.aoiError.fnError(d, "custom", { inside: data.inside }, `type`);
                     }
