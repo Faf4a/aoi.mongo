@@ -85,7 +85,7 @@ class Database {
 
     async get(table, variable, guildId, userId, messageId, channelId) {
         const col = this.client.db.db(table).collection(variable);
-        let __var = this.client.variableManager.cache.get(variable + "_undefined")?.default;
+        const __var = this.client.variableManager.cache.get(variable + "_undefined")?.default;
 
         const data = await col.findOne({
             _guildId: guildId ? guildId : null,
@@ -93,6 +93,9 @@ class Database {
             _messageId: messageId ? messageId : null,
             _channelId: channelId ? channelId : null,
         }, { _v: 1, _id: 0 });
+
+        console.log(data)
+        console.log(__var)
 
         if (!data) {
             if (__var === undefined) {
