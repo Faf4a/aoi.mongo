@@ -11,63 +11,92 @@ class Database {
     }
 
     async connect() {
-        this.client.db = new MongoClient(this.options.url, {
-            serverApi: {
-              version: ServerApiVersion.v1,
-              strict: true,
-              deprecationErrors: false,
-            },
-        });
-        
-        await this.client.db.connect();
+        try {
+            this.client.db = new MongoClient(this.options.url, {
+                serverApi: {
+                version: ServerApiVersion.v1,
+                strict: true,
+                deprecationErrors: false,
+                },
+            });
+            
+            await new Promise((resolve) => {
+                this.client.once("ready", () => {
+                    resolve();
+                });
+            });
 
-        if (this.options?.cleanup?.enabled == true) {
-            const duration = this.options?.cleanup?.duration ?? 7200000
-            const collection = this.options?.cleanup?.collection ?? "cooldown";
+            await this.client.db.connect();
 
-            if (typeof duration !== "number" || duration <= 0) throw new TypeError(`Invalid cleanup duration provided in "${duration}"`);
-            setInterval(async () => {
-                await this.client.db.clean(collection);
-            }, duration);
-        }
+            if (this.options?.cleanup?.enabled == true) {
+                const duration = this.options?.cleanup?.duration ?? 7200000
+                const collection = this.options?.cleanup?.collection ?? "cooldown";
 
-        if (this.options.logging !== false) {
-            let ping = (await this.client.db.db("admin").command({ ping: 1 })).ok;
+                if (typeof duration !== "number" || duration <= 0) throw new TypeError(`Invalid cleanup duration provided in "${duration}"`);
+                setInterval(async () => {
+                    await this.client.db.clean(collection);
+                }, duration);
+            }
+
+            if (this.options.logging !== false) {
+                let ping = (await this.client.db.db("admin").command({ ping: 1 })).ok;
+                AoiError.createCustomBoxedMessage(
+                    [
+                    {
+                        text: `Successfully connected to MongoDB`,
+                        textColor: "white",
+                    },
+                    {
+                        text: `Latency: ${ping}ms`,
+                        textColor: "white",
+                    },
+                    ],
+                    "white",
+                    { text: "aoi.js-mongo ", textColor: "cyan" }
+                );
+            }
+
+            //bind
+            this.client.db.get = this.get.bind(this);
+            this.client.db.set = this.set.bind(this);
+            this.client.db.drop = this.drop.bind(this);
+            this.client.db.delete = this.delete.bind(this);
+            this.client.db.findOne = this.findOne.bind(this);
+            this.client.db.findMany = this.findMany.bind(this);
+            this.client.db.clean = this.clean.bind(this);
+        } catch (err) {
             AoiError.createCustomBoxedMessage(
                 [
                 {
-                    text: `Successfully connected to MongoDB`,
-                    textColor: "white",
+                    text: `Failed to connect to MongoDB`,
+                    textColor: "red",
                 },
                 {
-                    text: `Latency: ${ping}ms`,
+                    text: err.message,
                     textColor: "white",
                 },
                 ],
                 "white",
-                { text: "aoi.js-mongo ", textColor: "cyan" }
+                { text: "aoi.js-mongo   ", textColor: "cyan" }
             );
+            await process.exit(0)
         }
-
-        //bind
-        this.client.db.get = this.get.bind(this);
-        this.client.db.set = this.set.bind(this);
-        this.client.db.drop = this.drop.bind(this);
-        this.client.db.delete = this.delete.bind(this);
-        this.client.db.findOne = this.findOne.bind(this);
-        this.client.db.findMany = this.findMany.bind(this);
-        this.client.db.clean = this.clean.bind(this);
     }
 
     async get(table, variable, guildId, userId, messageId, channelId) {
         const col = this.client.db.db(table).collection(variable);
-            
-        return (await col.findOne({
+        const __var = this.client.variableManager.get(variable, "undefined")?.default;
+
+        if (!__var) return console.error(`[aoi.js-mongo]: Unable to find variable "${variable}" in variable manager.`);
+
+        const data = (await col.findOne({
             _guildId: guildId ? guildId : null,
             _userId: userId ? userId : null,
             _messageId: messageId ? messageId : null,
             _channelId: channelId ? channelId : null,
-        }, { _v: 1, _id: 0 }))?._v;
+        }, { _v: 1, _id: 0 }))?._v
+
+        return data || __var;
     }
      
     async set(table, variable, data, guildId, userId, messageId, channelId) {
@@ -163,7 +192,7 @@ class Database {
                 const data = await d.util.aoiFunc(d);
                 const [variable, table = "default", userId = d.author?.id , guildId = d.guild?.id ] = data.inside.splits;
 
-                data.result = await d.client.db.get(table, variable, guildId, userId) || undefined;
+                data.result = await d.client.db.get(table, variable, guildId, userId);
 
                 return {
                     code: d.util.setCode(data),
@@ -409,41 +438,7 @@ class Database {
                     code: d.util.setCode(data),
                 };
             },
-        }, {
-            name: "$getGlobalUserLeaderboard",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", format = "{position}) {user.name}: {value}", sep = "\n"] = data.inside.splits;
-            
-                let lb_data = await d.client.db.findMany(table, variable, {
-                    _guildId: null,
-                    _userId: { $ne: null },
-                    _messageId: null,
-                    _channelId: null,
-                });
-            
-                lb_data = lb_data.sort((a, b) => b._v - a._v);
-                        
-                lb_data = await Promise.all(lb_data.map(async (e, index) => {
-                    const user = d.client.users.cache.get(e._userId) || await d.client.users.fetch(e._userId);
-                    console.log(e._v.toLocaleString());
-                    return format
-                        .replace("{user}", e._userId)
-                        .replace("{user.name}", user ? user.username : "Unknown User")
-                        .replace("{value}", e._v)
-                        .replace("{value:false}", e._v)
-                        .replace("{value:true}", Number(e._v).toLocaleString() || e._v)
-                        .replace("{position}", index + 1);
-                }));
-            
-                data.result = lb_data.join(sep);
-            
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
+        },  {
             name: "$getLeaderboardInfo",
             type: "djs",
             code: async (d) => {
