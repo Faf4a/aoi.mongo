@@ -35,6 +35,10 @@ const database = new Database(client, {
     logging: true // enables or disables logs
 });
 
+client.variables({
+    variable: "value"
+});
+
 // rest of your index.js..
 ```
 
