@@ -97,15 +97,15 @@ class Database {
         console.log(data)
         console.log(__var)
 
-        if (!data) {
+        if (data === null) {
             if (__var === undefined) {
                 console.error(`[aoi.js-mongo]: Unable to find variable "${variable}" in variable manager.`);
                 return undefined;
             }
             return __var;
+        } else {
+            return data._v;
         }
-
-        return data._v;
     }
      
     async set(table, variable, data, guildId, userId, messageId, channelId) {
