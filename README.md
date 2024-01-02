@@ -55,3 +55,11 @@ You need to be registered at https://cloud.mongodb.com/, and create a database a
 ![https://i.imgur.com/ZTMbq4h.png](https://i.imgur.com/ZTMbq4h.png)
 
 Then paste it in the **URL** field of the database setup, and you're pretty much done!
+
+#### Server Connection Timeout
+
+- Make sure you allowed ALL IPS to connect to your mongoDB server.
+
+`Security` -> `Network Access` -> `Allow all IPs`
+
+![img](https://media.discordapp.net/attachments/1154498484293095564/1191418810754924675/image.png)
