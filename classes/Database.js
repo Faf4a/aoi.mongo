@@ -89,7 +89,7 @@ class Database {
 
         if (!__var) return console.error(`[aoi.js-mongo]: Unable to find variable "${variable}" in variable manager.`);
 
-        __var = this.client.variableManager.get(variable, "undefined");
+        __var = this.client.variableManager.get(variable, "undefined")?.default;
 
         const data = (await col.findOne({
             _guildId: guildId ? guildId : null,
