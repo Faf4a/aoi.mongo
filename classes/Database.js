@@ -97,9 +97,6 @@ class Database {
             _channelId: channelId ? channelId : null,
         }, { _v: 1, _id: 0 });
 
-        console.log(data)
-        console.log(__var)
-
         return data?._v || __var;
     }
      
