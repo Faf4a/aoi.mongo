@@ -85,11 +85,7 @@ class Database {
 
     async get(table, variable, guildId, userId, messageId, channelId) {
         const col = this.client.db.db(table).collection(variable);
-        const __var = this.client.variableManager.get(variable, "undefined")?.default;
-
-        console.log("[DEBUG __var]: " + __var)
-
-        console.log("[DEBUG col]: " + col)
+        const __var = this.client.variableManager.has(variable, "undefined");
 
         if (!__var) return console.error(`[aoi.js-mongo]: Unable to find variable "${variable}" in variable manager.`);
 
