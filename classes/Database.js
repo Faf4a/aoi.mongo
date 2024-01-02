@@ -100,7 +100,7 @@ class Database {
         console.log(data)
         console.log(__var)
 
-        return data?._v || __var?.default
+        return data?._v || __var;
     }
      
     async set(table, variable, data, guildId, userId, messageId, channelId) {
