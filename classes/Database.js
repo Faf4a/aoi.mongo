@@ -175,7 +175,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, value, table = "default", userId = d.author?.id, guildId = d.guild?.id ] = data.inside.splits;
+                const [variable, value,, userId = d.author?.id, guildId = d.guild?.id, table = "default"] = data.inside.splits;
 
                 await d.client.db.set(table, variable, value, guildId, userId);
 
@@ -190,7 +190,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", userId = d.author?.id , guildId = d.guild?.id ] = data.inside.splits;
+                const [variable, userId = d.author?.id , guildId = d.guild?.id, table = "default"] = data.inside.splits;
 
                 data.result = await d.client.db.get(table, variable, guildId, userId);
 
@@ -203,7 +203,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, value, table = "default", guildId = d.guild?.id ] = data.inside.splits;
+                const [variable, value, guildId = d.guild?.id, table = "default"] = data.inside.splits;
 
                 await d.client.db.set(table, variable, value, guildId);
 
@@ -218,7 +218,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", guildId = d.guild?.id ] = data.inside.splits;
+                const [variable, guildId = d.guild?.id, table = "default"] = data.inside.splits;
 
                 data.result = await d.client.db.get(table, variable, guildId) || undefined;
 
@@ -231,7 +231,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, value, table = "default", userId = d.author?.id ] = data.inside.splits;
+                const [variable, value, userId = d.author?.id, table = "default" ] = data.inside.splits;
 
                 await d.client.db.set(table, variable, value, null, userId);
 
@@ -246,7 +246,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", userId = d.author?.id ] = data.inside.splits;
+                const [variable, userId = d.author?.id, table = "default" ] = data.inside.splits;
 
                 data.result = await d.client.db.get(table, variable, null, userId) || undefined;
 
@@ -287,7 +287,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, value, table = "default", channelId = d.channel?.id ] = data.inside.splits;
+                const [variable, value, channelId = d.channel?.id, table = "default"] = data.inside.splits;
 
                 await d.client.db.set(table, variable, value, null, null, null, channelId);
 
@@ -302,7 +302,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", channelId = d.channel?.id ] = data.inside.splits;
+                const [variable, channelId = d.channel?.id, table = "default" ] = data.inside.splits;
 
                 data.result = await d.client.db.get(table, variable, null, null, null, channelId) || undefined;
 
@@ -315,7 +315,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, value, table = "default", messageId = d.message?.id ] = data.inside.splits;
+                const [variable, value, messageId = d.message?.id, table = "default" ] = data.inside.splits;
 
                 await d.client.db.set(table, variable, value, null, null, messageId);
 
@@ -330,7 +330,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", messageId = d.message?.id ] = data.inside.splits;
+                const [variable, messageId = d.message?.id, table = "default"] = data.inside.splits;
 
                 data.result = await d.client.db.get(table, variable, null, null, messageId) || undefined;
 
