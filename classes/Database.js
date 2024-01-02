@@ -87,6 +87,10 @@ class Database {
         const col = this.client.db.db(table).collection(variable);
         const __var = this.client.variableManager.get(variable, "undefined")?.default;
 
+        console.log("[DEBUG __var]: " + __var)
+
+        console.log("[DEBUG col]: " + col)
+
         if (!__var) return console.error(`[aoi.js-mongo]: Unable to find variable "${variable}" in variable manager.`);
 
         const data = (await col.findOne({
@@ -439,6 +443,58 @@ class Database {
                 };
             },
         },  {
+            name: "$getUserLeaderboardInfo",
+            type: "djs",
+            code: async (d) => {
+                const data = await d.util.aoiFunc(d);
+                let [variable, table = "default", varType = "global", resolveId = d.author?.id, format = "value"] = data.inside.splits;
+            
+                let type;
+                if (varType === "global") {
+                    type = {
+                        _guildId: null,
+                        _userId: { $ne: null },
+                        _messageId: null,
+                        _channelId: null,
+                    }
+                } else if (varType === "guild") {
+                    type = {
+                        _guildId: { $ne: null },
+                        _userId: null,
+                        _messageId: null,
+                        _channelId: null,
+                    }
+                } else if (varType === "user") {
+                    type = {
+                        _guildId: { $ne: null },
+                        _userId: { $ne: null },
+                        _messageId: null,
+                        _channelId: null,
+                    }
+                }
+
+                let lb_data = await d.client.db.findMany(table, variable, type);
+                lb_data = lb_data.sort((a, b) => b._v - a._v);
+                
+                const key = varType === "guild" ? "_guildId" : "_userId";
+
+                try {
+                    if (format === "position") {
+                        data.result = lb_data.findIndex(obj => obj[key] === resolveId) + 1;
+                    } else if (format === "value") {
+                        data.result = lb_data.filter(obj => obj[key] === resolveId)[0]._v;
+                    } else {
+                        return d.aoiError.fnError(d, "custom", { inside: data.inside }, `type`);
+                    }
+                } catch (e) {
+                    return d.aoiError.fnError(d, "custom", {}, `Couldn't find _v in variable`);
+                }
+            
+                return {
+                    code: d.util.setCode(data),
+                };
+            },
+        }, {
             name: "$getLeaderboardInfo",
             type: "djs",
             code: async (d) => {
