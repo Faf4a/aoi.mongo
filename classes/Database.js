@@ -19,12 +19,15 @@ class Database {
                 deprecationErrors: false,
                 },
             });
-            
-            await new Promise((resolve) => {
-                this.client.once("ready", () => {
-                    resolve();
-                });
-            });
+
+            //bind
+            this.client.db.get = this.get.bind(this);
+            this.client.db.set = this.set.bind(this);
+            this.client.db.drop = this.drop.bind(this);
+            this.client.db.delete = this.delete.bind(this);
+            this.client.db.findOne = this.findOne.bind(this);
+            this.client.db.findMany = this.findMany.bind(this);
+            this.client.db.clean = this.clean.bind(this);
 
             await this.client.db.connect();
 
@@ -55,15 +58,6 @@ class Database {
                     { text: "aoi.js-mongo ", textColor: "cyan" }
                 );
             }
-
-            //bind
-            this.client.db.get = this.get.bind(this);
-            this.client.db.set = this.set.bind(this);
-            this.client.db.drop = this.drop.bind(this);
-            this.client.db.delete = this.delete.bind(this);
-            this.client.db.findOne = this.findOne.bind(this);
-            this.client.db.findMany = this.findMany.bind(this);
-            this.client.db.clean = this.clean.bind(this);
         } catch (err) {
             AoiError.createCustomBoxedMessage(
                 [
