@@ -1,6 +1,6 @@
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const AoiError = require("aoi.js/src/classes/AoiError");
-
+const Timeout = require("./Timeout");
 class Database {
     constructor(client, options) {
         this.client = client;
@@ -29,17 +29,21 @@ class Database {
             this.client.db.findMany = this.findMany.bind(this);
             this.client.db.clean = this.clean.bind(this);
 
+            //connect
             await this.client.db.connect();
 
+            //cleanup
             if (this.options?.cleanup?.enabled == true) {
                 const duration = this.options?.cleanup?.duration ?? 7200000
-                const collection = this.options?.cleanup?.collection ?? "cooldown";
+                const collection = "aoijs_vars";
 
                 if (typeof duration !== "number" || duration <= 0) throw new TypeError(`Invalid cleanup duration provided in "${duration}"`);
                 setInterval(async () => {
                     await this.client.db.clean(collection);
                 }, duration);
             }
+
+            //await (new Timeout(this.client)).ready();
 
             if (this.options.logging !== false) {
                 let ping = (await this.client.db.db("admin").command({ ping: 1 })).ok;
@@ -71,16 +75,16 @@ class Database {
                 },
                 ],
                 "white",
-                { text: "aoi.js-mongo   ", textColor: "cyan" }
+                { text: "aoi.js-mongo ", textColor: "cyan" }
             );
-            await process.exit(0)
+            process.exit(0)
         }
     }
 
     async get(table, variable, guildId, userId, messageId, channelId) {
         const col = this.client.db.db(table).collection(variable);
 
-        if (!this.client.variableManager.has(variable, "undefined")) return;
+        if (!this.client.variableManager.has(variable, "undefined") && table !== "aoijs_vars") return;
 
         const __var = this.client.variableManager.get(variable, "undefined")?.default;
 
@@ -89,11 +93,11 @@ class Database {
             _userId: userId ? userId : null,
             _messageId: messageId ? messageId : null,
             _channelId: channelId ? channelId : null,
-        }, { _v: 1, _id: 0 });
+        });
 
         return data?._v || __var;
     }
-     
+
     async set(table, variable, data, guildId, userId, messageId, channelId) {
         const col = this.client.db.db(table).collection(variable);    
         await col.updateOne({ _guildId: guildId, _userId: userId }, { $set: { _v: data, _guildId: guildId, _userId: userId, _messageId: messageId, _channelId: channelId } }, { upsert: true });
@@ -187,7 +191,7 @@ class Database {
                 const data = await d.util.aoiFunc(d);
                 const [variable, userId = d.author?.id , guildId = d.guild?.id, table = "default"] = data.inside.splits;
 
-                data.result = await d.client.db.get(table, variable, guildId, userId);
+                data.result = await d.client.db.get(table, variable, guildId, userId) || undefined;
 
                 return {
                     code: d.util.setCode(data),
@@ -417,7 +421,6 @@ class Database {
                         
                 lb_data = await Promise.all(lb_data.map(async (e, index) => {
                     const user = d.client.users.cache.get(e._userId) || await d.client.users.fetch(e._userId);
-                    console.log(e._v.toLocaleString());
                     return format
                         .replace("{user}", e._userId)
                         .replace("{user.name}", user ? user.username : "Unknown User")
@@ -552,7 +555,7 @@ class Database {
             code: async (d) => {
                 const { Time } = require("aoi.js/src/utils/helpers/customParser")
                 const data = await d.util.aoiFunc(d);
-                let [time, error, table = "cooldown"] = data.inside.splits;
+                let [time, error, table = "aoijs_vars"] = data.inside.splits;
                 if (!d.command?.name) return d.aoiError.fnError(d, "custom", {}, `Command name not found`);
 
                 time = Date.now() + Time.parse(time).ms
@@ -584,7 +587,7 @@ class Database {
             code: async (d) => {
                 const { Time } = require("aoi.js/src/utils/helpers/customParser")
                 const data = await d.util.aoiFunc(d);
-                let [time, error, table = "cooldown"] = data.inside.splits;
+                let [time, error, table = "aoijs_vars"] = data.inside.splits;
                 if (!d.command?.name) return d.aoiError.fnError(d, "custom", {}, `Command name not found`);
 
                 time = Date.now() + Time.parse(time).ms
@@ -616,7 +619,7 @@ class Database {
             code: async (d) => {
                 const { Time } = require("aoi.js/src/utils/helpers/customParser")
                 const data = await d.util.aoiFunc(d);
-                let [time, error, table = "cooldown"] = data.inside.splits;
+                let [time, error, table = "aoijs_vars"] = data.inside.splits;
                 if (!d.command?.name) return d.aoiError.fnError(d, "custom", {}, `Command name not found`);
 
                 time = Date.now() + Time.parse(time).ms
@@ -647,7 +650,7 @@ class Database {
             type: "djs",
             code: async (d) => {
                 const data = await d.util.aoiFunc(d);
-                const [command, type, resolveId, table = "cooldown"] = data.inside.splits;
+                const [command, type, resolveId, table = "aoijs_vars"] = data.inside.splits;
 
                 let cooldown;
 
@@ -664,9 +667,26 @@ class Database {
                 if (!cooldown) {
                     data.result = 0;
                 } else {
-                    data.result = cooldown?._v
+                    data.result = Number(cooldown)
                 }
             
+                return {
+                    code: d.util.setCode(data)
+                };
+            },
+        }, {
+            name: "$setTimeout",
+            type: "djs",
+            code: async (d) => {
+                const data = await d.util.aoiFunc(d);
+                const [command, duration, timeoutData, returnId = "false"] = data.inside.splits;
+
+                const timeout = new Timeout(this.client);
+                
+                const id = await timeout.set(command, timeoutData, duration);
+
+                data.result = returnId === "true" ? id : undefined;
+                
                 return {
                     code: d.util.setCode(data)
                 };
