@@ -8,7 +8,7 @@ To get started with aoi.js-mongo, we have to do a couple things.
 
 - Install the package.
 ```bash
-npm install aoi.js-mongo@latest
+npm install github:faf4a/aoi.mongo
 ```
 
 - Update your index.js file.
@@ -27,11 +27,7 @@ const client = new AoiClient({
 
 const database = new Database(client, {
     url: "mongodb+srv://...", // your mongoDB server uri
-    cleanup: {
-      collection: "cooldown", // the collection where you store your cooldown data ("cooldown" by default)
-      enabled: true, // enable cleanup of not used variables within the given collection
-      duration: 86400000 // the duration of the cleanup, once a day is enough (in ms)
-    },
+    tables: ["main"],
     logging: true // enables or disables logs
 });
 
@@ -61,5 +57,3 @@ Then paste it in the **URL** field of the database setup, and you're pretty much
 - Make sure you allowed ALL IPS to connect to your mongoDB server.
 
 `Security` -> `Network Access` -> `Allow all IPs`
-
-![img](https://media.discordapp.net/attachments/1154498484293095564/1191418810754924675/image.png)
