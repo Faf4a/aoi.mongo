@@ -1,11 +1,8 @@
 {
   "name": "aoi.js-mongo",
-  "version": "1.1.32",
-  "description": "",
+  "version": "0.1",
+  "description": "Package which brings MongoDB support to aoi.js",
   "main": "./classes/Database.js",
-  "scripts": {
-    "test": "echo \"success\" && exit 0"
-  },
   "license": "ISC",
   "dependencies": {
     "mongodb": "^6.3.0"

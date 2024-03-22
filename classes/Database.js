@@ -1,698 +1,240 @@
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const AoiError = require("aoi.js/src/classes/AoiError");
-const Timeout = require("./Timeout");
 class Database {
-    constructor(client, options) {
-        this.client = client;
-        this.options = options;
+  constructor(client, options) {
+    this.client = client;
+    this.options = options;
 
-        this.connect();
-        this.createFunctions();
-    }
+    this.connect();
+  }
 
-    async connect() {
-        try {
-            this.client.db = new MongoClient(this.options.url, {
-                serverApi: {
-                version: ServerApiVersion.v1,
-                strict: true,
-                deprecationErrors: false,
-                },
-            });
-
-            //bind
-            this.client.db.get = this.get.bind(this);
-            this.client.db.set = this.set.bind(this);
-            this.client.db.drop = this.drop.bind(this);
-            this.client.db.delete = this.delete.bind(this);
-            this.client.db.findOne = this.findOne.bind(this);
-            this.client.db.findMany = this.findMany.bind(this);
-            this.client.db.clean = this.clean.bind(this);
-
-            //connect
-            await this.client.db.connect();
-
-            //cleanup
-            if (this.options?.cleanup?.enabled == true) {
-                const duration = this.options?.cleanup?.duration ?? 7200000
-                const collection = "aoijs_vars";
-
-                if (typeof duration !== "number" || duration <= 0) throw new TypeError(`Invalid cleanup duration provided in "${duration}"`);
-                setInterval(async () => {
-                    await this.client.db.clean(collection);
-                }, duration);
-            }
-
-            //await (new Timeout(this.client)).ready();
-
-            if (this.options.logging !== false) {
-                let ping = (await this.client.db.db("admin").command({ ping: 1 })).ok;
-                AoiError.createCustomBoxedMessage(
-                    [
-                    {
-                        text: `Successfully connected to MongoDB`,
-                        textColor: "white",
-                    },
-                    {
-                        text: `Latency: ${ping}ms`,
-                        textColor: "white",
-                    },
-                    ],
-                    "white",
-                    { text: "aoi.js-mongo ", textColor: "cyan" }
-                );
-            }
-        } catch (err) {
-            AoiError.createCustomBoxedMessage(
-                [
-                {
-                    text: `Failed to connect to MongoDB`,
-                    textColor: "red",
-                },
-                {
-                    text: err.message,
-                    textColor: "white",
-                },
-                ],
-                "white",
-                { text: "aoi.js-mongo ", textColor: "cyan" }
-            );
-            process.exit(0)
+  async connect() {
+    try {
+      this.client.db = new MongoClient(this.options.url, {
+        serverApi: {
+          version: ServerApiVersion.v1,
+          strict: true,
+          deprecationErrors: false
         }
+      });
+
+      if (!this.options.tables || this.options?.tables.length === 0) throw new TypeError("Missing variable tables, please provide at least one table.");
+      if (this.options.tables.includes("__aoijs_vars__")) throw new TypeError("'__aoijs_vars__' is reserved as a table name.");
+      this.client.db.tables = [...this.options.tables, "__aoijs_vars__"];
+
+      //bind
+      this.client.db.get = this.get.bind(this);
+      this.client.db.set = this.set.bind(this);
+      this.client.db.drop = this.drop.bind(this);
+      this.client.db.delete = this.delete.bind(this);
+      this.client.db.findOne = this.findOne.bind(this);
+      this.client.db.findMany = this.findMany.bind(this);
+      this.client.db.all = this.all.bind(this);
+      this.client.db.clean = this.clean.bind(this);
+
+      // database ping
+      this.client.db.ping = this.ping.bind(this);
+
+      //connect
+      await this.client.db.connect();
+
+      // create one function ($datebasePing -> $dbPing)
+      this.client.functionManager.createFunction({
+        name: "$dbPing",
+        type: "djs",
+        code: async (d) => {
+          const data = d.util.aoiFunc(d);
+
+          data.result = await d.client.db.ping();
+
+          return {
+            code: d.util.setCode(data)
+          };
+        }
+      });
+
+      //cleanup
+      if (this.options?.cleanup?.enabled == true) {
+        const duration = this.options?.cleanup?.duration ?? 7200000;
+        const collection = "__aoijs_vars__";
+
+        if (typeof duration !== "number" || duration <= 0) throw new TypeError(`Invalid cleanup duration provided in "${duration}"`);
+        setInterval(async () => {
+          await this.client.db.clean(collection);
+        }, duration);
+      }
+
+      if (this.options.logging != false) {
+        const latency = await this.client.db.ping();
+        const { version } = require("../package.json");
+        if (latency != "-1") {
+          AoiError.createCustomBoxedMessage(
+            [
+              {
+                text: `Successfully connected to MongoDB`,
+                textColor: "white"
+              },
+              {
+                text: `Cluster Latency: ${latency}ms`,
+                textColor: "white"
+              },
+              {
+                text: `Installed on v${version}`,
+                textColor: "green"
+              }
+            ],
+            "white",
+            { text: " aoi.js-mongo  ", textColor: "cyan" }
+          );
+        }
+      }
+    } catch (err) {
+      AoiError.createCustomBoxedMessage(
+        [
+          {
+            text: `Failed to connect to MongoDB`,
+            textColor: "red"
+          },
+          {
+            text: err.message,
+            textColor: "white"
+          }
+        ],
+        "white",
+        { text: " aoi.js-mongo  ", textColor: "cyan" }
+      );
+      process.exit(0);
+    }
+  }
+
+  async ping() {
+    let start = Date.now();
+    const res = await this.client.db.db("admin").command({ ping: 1 });
+    if (!res.ok) return -1;
+    return Date.now() - start;
+  }
+
+  async get(table, key, id) {
+    const col = this.client.db.db(table).collection(key);
+
+    if (!this.client.variableManager.has(key, table) && table !== "__aoijs_vars__") return;
+
+    const __var = this.client.variableManager.get(key, table)?.default;
+
+    const data = await col.findOne({ key: `${key}_${id}` });
+
+    return data || __var;
+  }
+
+  async set(table, key, id, value) {
+    const col = this.client.db.db(table).collection(key);
+    await col.updateOne({ key: `${key}_${id}` }, { $set: { value: value } }, { upsert: true });
+  }
+
+  async drop(table, variable) {
+    if (variable) {
+      await this.client.db.db(table).collection(variable).drop();
+    } else {
+      await this.client.db.db(table).dropDatabase();
+    }
+  }
+
+  async findOne(table, query) {
+    const col = this.client.db.db(table).collection(query);
+    return await col.findOne({}, { value: 1, _id: 0 });
+  }
+
+  async delete(table, key, id) {
+    const db = this.client.db.db(table);
+    const collections = await db.listCollections().toArray();
+
+    let dkey = `${key}_${id}`;
+    if (table === "__aoijs_vars__" && typeof key === "number") {
+      dkey = `setTimeout_${key}`;
     }
 
-    async get(table, variable, guildId, userId, messageId, channelId) {
-        const col = this.client.db.db(table).collection(variable);
+    for (let collection of collections) {
+      const col = db.collection(collection.name);
+      const doc = await col.findOne({ key: dkey });
 
-        if (!this.client.variableManager.has(variable, "undefined") && table !== "aoijs_vars") return;
+      if (doc) {
+        await col.deleteOne({ key: dkey });
 
-        const __var = this.client.variableManager.get(variable, "undefined")?.default;
-
-        const data = await col.findOne({
-            _guildId: guildId ? guildId : null,
-            _userId: userId ? userId : null,
-            _messageId: messageId ? messageId : null,
-            _channelId: channelId ? channelId : null,
-        });
-
-        return data?._v || __var;
-    }
-
-    async set(table, variable, data, guildId, userId, messageId, channelId) {
-        const col = this.client.db.db(table).collection(variable);    
-        await col.updateOne({ _guildId: guildId, _userId: userId }, { $set: { _v: data, _guildId: guildId, _userId: userId, _messageId: messageId, _channelId: channelId } }, { upsert: true });
-    }
-
-    async drop(table, variable) {
-        (await this.client.db.db(table).collection(variable)).drop();
-    }
-     
-    async findOne(table, variable) {
-       const col = this.client.db.db(table).collection(variable);
-       return await col.findOne({}, { _v: 1, _id: 0 });
-    }
-    
-    async delete(table, variable, value, guildId, userId, messageId, channelId) {
-        const col = this.client.db.db(table).collection(variable);
-
-        await col.deleteOne({
-            _v: value ? value : 0,
-            _guildId: guildId ? guildId : null,
-            _userId: userId ? userId : null,
-            _messageId: messageId ? messageId : null,
-            _channelId: channelId ? channelId : null,
-        });
-    
         if ((await col.countDocuments({})) === 0) await col.drop();
+
+        break;
+      }
     }
-     
-    async findMany(table, variable, query) {
-       const col = this.client.db.db(table).collection(variable);
-       return await col.find(query).toArray();
+  }
+
+  async findMany(table, query, limit) {
+    const db = this.client.db.db(table);
+    const collections = await db.listCollections().toArray();
+    let results = [];
+
+    for (let collection of collections) {
+      const col = db.collection(collection.name);
+      let data;
+
+      if (typeof query === "function") {
+        data = await col.find({}).toArray();
+        data = data.filter(query);
+      } else {
+        data = await col.find(query).toArray();
+      }
+
+      if (limit) {
+        data = data.slice(0, limit);
+      }
+
+      results.push(...data);
     }
 
-    //cooldown collection clean
+    return results;
+  }
 
-    async clean(__collection) {
-        const db = this.client.db.db(__collection);
-        const collections = await db.listCollections().toArray();
+  async all(table, filter, list = 100, sort = "asc") {
+    const db = this.client.db.db(table);
+    const collections = await db.listCollections().toArray();
+    let results = [];
 
-        for (const col of collections) {
-            const collection = db.collection(col.name);
-    
-            const __items = await collection.find({ _v: { $lt: Date.now() } }).toArray();
-
-            if (__items.length > 0) {
-                const __id = __items.map(item => item._id);
-                await collection.deleteMany({ _id: { $in: __id } });
-            }
-
-            const __col = await collection.countDocuments();
-
-            if (__col === 0) await collection.drop();
-        }
+    for (let collection of collections) {
+      const col = db.collection(collection.name);
+      let data = await col.find({}).toArray();
+      data = data.filter(filter);
+      results.push(...data);
     }
-     
-    async createFunctions() {      
-        this.client.functionManager.createFunction({
-            name: "$deleteVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, table = "default"] = data.inside.splits;
 
-                await d.client.db.drop(table, variable);
-
-                data.result = ""
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$setUserVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, value,, userId = d.author?.id, guildId = d.guild?.id, table = "default"] = data.inside.splits;
-
-                await d.client.db.set(table, variable, value, guildId, userId);
-
-                data.result = "";
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getUserVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, userId = d.author?.id , guildId = d.guild?.id, table = "default"] = data.inside.splits;
-
-                data.result = await d.client.db.get(table, variable, guildId, userId) || undefined;
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$setGuildVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, value, guildId = d.guild?.id, table = "default"] = data.inside.splits;
-
-                await d.client.db.set(table, variable, value, guildId);
-
-                data.result = "";
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getGuildVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, guildId = d.guild?.id, table = "default"] = data.inside.splits;
-
-                data.result = await d.client.db.get(table, variable, guildId) || undefined;
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$setGlobalUserVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, value, userId = d.author?.id, table = "default" ] = data.inside.splits;
-
-                await d.client.db.set(table, variable, value, null, userId);
-
-                data.result = "";
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getGlobalUserVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, userId = d.author?.id, table = "default" ] = data.inside.splits;
-
-                data.result = await d.client.db.get(table, variable, null, userId) || undefined;
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$setVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, value, table = "default" ] = data.inside.splits;
-
-                await d.client.db.set(table, variable, value);
-
-                data.result = "";
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, table = "default" ] = data.inside.splits;
-
-                data.result = await d.client.db.get(table, variable) || undefined;
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$setChannelVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, value, channelId = d.channel?.id, table = "default"] = data.inside.splits;
-
-                await d.client.db.set(table, variable, value, null, null, null, channelId);
-
-                data.result = "";
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getChannelVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, channelId = d.channel?.id, table = "default" ] = data.inside.splits;
-
-                data.result = await d.client.db.get(table, variable, null, null, null, channelId) || undefined;
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$setMessageVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, value, messageId = d.message?.id, table = "default" ] = data.inside.splits;
-
-                await d.client.db.set(table, variable, value, null, null, messageId);
-
-                data.result = "";
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getMessageVar",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, messageId = d.message?.id, table = "default"] = data.inside.splits;
-
-                data.result = await d.client.db.get(table, variable, null, null, messageId) || undefined;
-
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getGuildLeaderboard",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", format = "{position}) {guild.name}: {value}", sep = "\n"] = data.inside.splits;
-            
-                let lb_data = await d.client.db.findMany(table, variable, {
-                    _guildId: { $ne: null },
-                    _userId: null,
-                    _messageId: null,
-                    _channelId: null,
-                });
-            
-                lb_data = lb_data.sort((a, b) => b._v - a._v);
-                        
-                lb_data = lb_data.map((e, index) => {
-                    const guild = d.client.guilds.cache.get(e._guildId);            
-            
-                    return format
-                        .replace("{guild}", e._guildId)
-                        .replace("{guild.name}", guild ? guild.name : "Unknown Guild")
-                        .replace("{value}", e._v)
-                        .replace("{value:false}", e._v)
-                        .replace("{value:true}", Number(e._v).toLocaleString() || e._v)
-                        .replace("{position}", index + 1);
-                });
-            
-                data.result = lb_data.join(sep);
-            
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getUserLeaderboard",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", format = "{position}) {user.name}: {value}", sep = "\n"] = data.inside.splits;
-            
-                let lb_data = await d.client.db.findMany(table, variable, {
-                    _guildId: { $ne: null },
-                    _userId: { $ne: null },
-                    _messageId: null,
-                    _channelId: null,
-                });
-            
-                lb_data = lb_data.sort((a, b) => b._v - a._v);
-                        
-                lb_data = await Promise.all(lb_data.map(async (e, index) => {
-                    const user = d.client.guilds.cache.get(e._guildId).members.cache.get(e._userId) || await d.client.guilds.cache.get(e._guildId)?.members.fetch(e._userId);
-                    return format
-                        .replace("{user}", e._userId)
-                        .replace("{user.name}", user ? user.user.username : "Unknown User")
-                        .replace("{value}", e._v)
-                        .replace("{value:false}", e._v)
-                        .replace("{value:true}", Number(e._v).toLocaleString() || e._v)
-                        .replace("{position}", index + 1);
-                }));
-            
-                data.result = lb_data.join(sep);
-            
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-            name: "$getGlobalUserLeaderboard",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [variable, table = "default", format = "{position}) {user.name}: {value}", sep = "\n"] = data.inside.splits;
-            
-                let lb_data = await d.client.db.findMany(table, variable, {
-                    _guildId: null,
-                    _userId: { $ne: null },
-                    _messageId: null,
-                    _channelId: null,
-                });
-            
-                lb_data = lb_data.sort((a, b) => b._v - a._v);
-                        
-                lb_data = await Promise.all(lb_data.map(async (e, index) => {
-                    const user = d.client.users.cache.get(e._userId) || await d.client.users.fetch(e._userId);
-                    return format
-                        .replace("{user}", e._userId)
-                        .replace("{user.name}", user ? user.username : "Unknown User")
-                        .replace("{value}", e._v)
-                        .replace("{value:false}", e._v)
-                        .replace("{value:true}", Number(e._v).toLocaleString() || e._v)
-                        .replace("{position}", index + 1);
-                }));
-            
-                data.result = lb_data.join(sep);
-            
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        },  {
-            name: "$getUserLeaderboardInfo",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                let [variable, table = "default", varType = "global", resolveId = d.author?.id, format = "value"] = data.inside.splits;
-            
-                let type;
-                if (varType === "global") {
-                    type = {
-                        _guildId: null,
-                        _userId: { $ne: null },
-                        _messageId: null,
-                        _channelId: null,
-                    }
-                } else if (varType === "guild") {
-                    type = {
-                        _guildId: { $ne: null },
-                        _userId: null,
-                        _messageId: null,
-                        _channelId: null,
-                    }
-                } else if (varType === "user") {
-                    type = {
-                        _guildId: { $ne: null },
-                        _userId: { $ne: null },
-                        _messageId: null,
-                        _channelId: null,
-                    }
-                }
-
-                let lb_data = await d.client.db.findMany(table, variable, type);
-                lb_data = lb_data.sort((a, b) => b._v - a._v);
-                
-                const key = varType === "guild" ? "_guildId" : "_userId";
-
-                try {
-                    if (format === "position") {
-                        data.result = lb_data.findIndex(obj => obj[key] === resolveId) + 1;
-                    } else if (format === "value") {
-                        data.result = lb_data.filter(obj => obj[key] === resolveId)[0]._v;
-                    } else {
-                        return d.aoiError.fnError(d, "custom", { inside: data.inside }, `type`);
-                    }
-                } catch (e) {
-                    return d.aoiError.fnError(d, "custom", {}, `Couldn't find _v in variable`);
-                }
-            
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, {
-            name: "$getLeaderboardInfo",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                let [variable, table = "default", varType = "global", position = "1", format = "value"] = data.inside.splits;
-            
-                let type;
-                if (varType === "global") {
-                    type = {
-                        _guildId: null,
-                        _userId: { $ne: null },
-                        _messageId: null,
-                        _channelId: null,
-                    }
-                } else if (varType === "guild") {
-                    type = {
-                        _guildId: { $ne: null },
-                        _userId: null,
-                        _messageId: null,
-                        _channelId: null,
-                    }
-                } else if (varType === "user") {
-                    type = {
-                        _guildId: { $ne: null },
-                        _userId: { $ne: null },
-                        _messageId: null,
-                        _channelId: null,
-                    }
-                }
-
-                let lb_data = await d.client.db.findMany(table, variable, type);
-                lb_data = lb_data.sort((a, b) => b._v - a._v);
-
-                if (lb_data.length === 0 || !lb_data) return d.aoiError.fnError(d, "custom", { inside: data.inside }, `lb_data`);
-                
-                format = format.toLowerCase()
-
-                if (position === "last") position = lb_data.length - 1 
-
-                try {
-                    if (format === "position") {
-                        data.result = position;
-                    } else if (format === "value") {
-                        data.result = lb_data[Number(position) - 1]._v
-                    } else if (format === "username") {
-                        data.result = (await d.util.getUser(d, lb_data[Number(position) - 1]._userId))?.username
-                    } else if (format === "userid") {
-                        data.result = (await d.util.getUser(d, lb_data[Number(position) - 1]._userId))?.username
-                    } else {
-                        return d.aoiError.fnError(d, "custom", { inside: data.inside }, `type`);
-                    }
-                } catch (e) {
-                    return d.aoiError.fnError(d, "custom", {}, `Couldn't find _v in variable`);
-                }
-            
-                return {
-                    code: d.util.setCode(data),
-                };
-            },
-        }, //cooldown functions
-        {
-            name: "$cooldown",
-            type: "djs",
-            code: async (d) => {
-                const { Time } = require("aoi.js/src/utils/helpers/customParser")
-                const data = await d.util.aoiFunc(d);
-                let [time, error, table = "aoijs_vars"] = data.inside.splits;
-                if (!d.command?.name) return d.aoiError.fnError(d, "custom", {}, `Command name not found`);
-
-                time = Date.now() + Time.parse(time).ms
-
-                let _v = await d.client.db.get(table, d.command.name, null, d.author?.id) || undefined
-
-                if (!_v) {
-                    await d.client.db.set(table, d.command.name, time, null, d.author?.id);
-                    error = false;
-                } else {
-                    if (Date.now() >= _v || !_v) {
-                        await d.client.db.set(table, d.command.name, time, null, d.author?.id);
-                        error = false
-                    } else {
-                        error = await d.util.errorParser(error, d);
-                        await d.aoiError.makeMessageError(d.client, d.channel, error.data ?? error, error.options, d);
-                        error = true;
-                    }
-                }
-            
-                return {
-                    code: d.util.setCode(data),
-                    error
-                };
-            },
-        }, {
-            name: "$guildCooldown",
-            type: "djs",
-            code: async (d) => {
-                const { Time } = require("aoi.js/src/utils/helpers/customParser")
-                const data = await d.util.aoiFunc(d);
-                let [time, error, table = "aoijs_vars"] = data.inside.splits;
-                if (!d.command?.name) return d.aoiError.fnError(d, "custom", {}, `Command name not found`);
-
-                time = Date.now() + Time.parse(time).ms
-
-                let _v = await d.client.db.get(table, d.command.name, d.guild?.id) || undefined
-
-                if (!_v) {
-                    await d.client.db.set(table, d.command.name, time, d.guild?.id);
-                    error = false;
-                } else {
-                    if (Date.now() >= _v || !_v) {
-                        await d.client.db.set(table, d.command.name, time, d.guild?.id);
-                        error = false
-                    } else {
-                        error = await d.util.errorParser(error, d);
-                        await d.aoiError.makeMessageError(d.client, d.channel, error.data ?? error, error.options, d);
-                        error = true;
-                    }
-                }
-            
-                return {
-                    code: d.util.setCode(data),
-                    error
-                };
-            },
-        }, {
-            name: "$channelCooldown",
-            type: "djs",
-            code: async (d) => {
-                const { Time } = require("aoi.js/src/utils/helpers/customParser")
-                const data = await d.util.aoiFunc(d);
-                let [time, error, table = "aoijs_vars"] = data.inside.splits;
-                if (!d.command?.name) return d.aoiError.fnError(d, "custom", {}, `Command name not found`);
-
-                time = Date.now() + Time.parse(time).ms
-
-                let _v = await d.client.db.get(table, d.command.name, null, null, null, d.channel?.id) || undefined
-
-                if (!_v) {
-                    await d.client.db.set(table, d.command.name, time, null, null, null, d.channel?.id);
-                    error = false;
-                } else {
-                    if (Date.now() >= _v || !_v) {
-                        await d.client.db.set(table, d.command.name, time, null, null, null, d.channel?.id);
-                        error = false
-                    } else {
-                        error = await d.util.errorParser(error, d);
-                        await d.aoiError.makeMessageError(d.client, d.channel, error.data ?? error, error.options, d);
-                        error = true;
-                    }
-                }
-            
-                return {
-                    code: d.util.setCode(data),
-                    error
-                };
-            },
-        }, {
-            name: "$getCooldownTime",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [command, type, resolveId, table = "aoijs_vars"] = data.inside.splits;
-
-                let cooldown;
-
-                if (type === "channel") {
-                    cooldown = await d.client.db.get(table, command, null, null, null, resolveId) || undefined
-                } else if (type === "user") {
-                    cooldown = await d.client.db.get(table, command, null, resolveId) || undefined
-                } else if (type === "guild") {
-                    cooldown = await d.client.db.get(table, command, resolveId) || undefined
-                } else {
-                    return d.aoiError.fnError(d, "custom", { inside: data.inside }, `type`);
-                }
-
-                if (!cooldown) {
-                    data.result = 0;
-                } else {
-                    data.result = Number(cooldown)
-                }
-            
-                return {
-                    code: d.util.setCode(data)
-                };
-            },
-        }, {
-            name: "$setTimeout",
-            type: "djs",
-            code: async (d) => {
-                const data = await d.util.aoiFunc(d);
-                const [command, duration, timeoutData, returnId = "false"] = data.inside.splits;
-
-                const timeout = new Timeout(this.client);
-                
-                const id = await timeout.set(command, timeoutData, duration);
-
-                data.result = returnId === "true" ? id : undefined;
-                
-                return {
-                    code: d.util.setCode(data)
-                };
-            },
-        });
+    if (sort === "asc") {
+      results.sort((a, b) => a.value - b.value);
+    } else if (sort === "desc") {
+      results.sort((a, b) => b.value - a.value);
     }
+
+    return results.slice(0, list);
+  }
+
+  //cooldown collection clean
+
+  async clean(__collection) {
+    const db = this.client.db.db(__collection);
+    const collections = await db.listCollections().toArray();
+
+    for (const col of collections) {
+      const collection = db.collection(col.name);
+
+      const __items = await collection.find({ _v: { $lt: Date.now() } }).toArray();
+
+      if (__items.length > 0) {
+        const __id = __items.map((item) => item._id);
+        await collection.deleteMany({ _id: { $in: __id } });
+      }
+
+      const __col = await collection.countDocuments();
+
+      if (__col === 0) await collection.drop();
+    }
+  }
 }
 
 module.exports = { Database };
