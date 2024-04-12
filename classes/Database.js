@@ -27,6 +27,7 @@ class Database {
       this.client.db.set = this.set.bind(this);
       this.client.db.drop = this.drop.bind(this);
       this.client.db.delete = this.delete.bind(this);
+      this.client.db.deleteMany = this.deleteMany.bind(this);
       this.client.db.findOne = this.findOne.bind(this);
       this.client.db.findMany = this.findMany.bind(this);
       this.client.db.all = this.all.bind(this);
@@ -142,6 +143,21 @@ class Database {
   async findOne(table, query) {
     const col = this.client.db.db(table).collection(query);
     return await col.findOne({}, { value: 1, _id: 0 });
+  }
+
+  async deleteMany(table, query) {
+    const db = this.client.db.db(table);
+    const collections = await db.listCollections().toArray();
+  
+    for (let collection of collections) {
+      const col = db.collection(collection.name);
+      await col.deleteMany({ q: query });
+  
+      const cd = await col.countDocuments();
+      if (cd === 0) {
+        await col.drop();
+      }
+    }
   }
 
   async delete(table, key, id) {
