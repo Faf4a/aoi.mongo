@@ -41,7 +41,7 @@ module.exports = async (client, options) => {
     }
   }
 
-  console.log(`[aoi.mongo]: Estimated time for backup: ${chalk.yellow(total * 75 / 1000)} seconds.`);
+  console.log(`[aoi.mongo]: Estimated time for backup: ${chalk.yellow((total * 75) / 1000)} seconds.`);
 
   console.warn("[aoi.mongo]: " + chalk.red("This process may take a while depending on the amount of data. Canceling this process will lose current progress."));
 
@@ -63,7 +63,7 @@ module.exports = async (client, options) => {
 
         const db = client.db.db(file.split("_scheme_")[0]);
 
-        console.log(`[aoi.mongo]: Transferring data from table ${chalk.yellow(file.split("_scheme_")[0])}...`)
+        console.log(`[aoi.mongo]: Transferring data from table ${chalk.yellow(file.split("_scheme_")[0])}...`);
 
         await new Promise((resolve) => setTimeout(resolve, 3e3));
 
@@ -75,7 +75,17 @@ module.exports = async (client, options) => {
 
           const currentProgress = ora(`[${index}/${total}]: Processing ${chalk.yellow(key)}...`).start();
 
-          const collection = db.collection(key.split("_")[0]);
+          const matches = key.match(/(.*?)(_\d+)(.*)/);
+          let text;
+
+          if (matches) {
+            let [_, matchedText, numbers, rest] = matches;
+            text = matchedText;
+          } else {
+            text = key;
+          }
+          
+          const collection = db.collection(text);
 
           if (!value.hasOwnProperty("value") || !key) {
             currentProgress.fail(`[${index}/${total}]: No data found for ${chalk.yellow(key)}`);

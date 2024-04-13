@@ -170,6 +170,10 @@ class Database {
     let dkey = `${key}_${id}`;
     if (table === "__aoijs_vars__" && typeof key === "number") {
       dkey = `setTimeout_${key}`;
+    } 
+
+    if (table === "__aoijs_vars__" && key === "ticketChannel") {
+      dkey = `ticketChannel_${id}`;
     }
 
     for (let collection of collections) {
