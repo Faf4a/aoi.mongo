@@ -61,9 +61,9 @@ module.exports = async (client, options) => {
 
         await new Promise((resolve) => setTimeout(resolve, 1e3));
 
-        const db = client.db.db(file.split("_")[0]);
+        const db = client.db.db(file.split("_scheme_")[0]);
 
-        console.log(`[aoi.mongo]: Transferring data from table ${chalk.yellow(file.split("_")[0])}...`)
+        console.log(`[aoi.mongo]: Transferring data from table ${chalk.yellow(file.split("_scheme_")[0])}...`)
 
         await new Promise((resolve) => setTimeout(resolve, 3e3));
 

@@ -15,7 +15,7 @@ npm install github:faf4a/aoi.mongo
 
 ```js
 const { AoiClient, LoadCommands } = require("aoi.js");
-const { Database } = require("aoi.js-mongo");
+const { Database } = require("aoi.mongo");
 
 const client = new AoiClient({
   token: "DISCORD BOT TOKEN",
@@ -37,6 +37,41 @@ client.variables({
 
 // rest of your index.js..
 ```
+
+## Transfer aoi.db database
+
+You can indeed transfer your database!
+
+```js
+const { AoiClient, LoadCommands } = require("aoi.js");
+const { Database } = require("aoi.mongo");
+
+const client = new AoiClient({
+  token: "DISCORD BOT TOKEN",
+  prefix: "DISCORD BOT PREFIX",
+  intents: ["Guilds", "GuildMessages", "GuildMembers", "MessageContent"],
+  events: ["onInteractionCreate", "onMessage"],
+  disableAoiDB: true // This is important, ensure it's set to true. You can't use both at once.
+});
+
+const database = new Database(client, {
+    url: "mongodb+srv://...", // your mongoDB server uri
+    tables: ["main"],
+    logging: true, // enables or disables logs
+    convertOldData: {
+      enabled: true,
+      dir: "./database"
+    },
+});
+
+client.variables({
+    variable: "value"
+});
+
+// rest of your index.js..
+```
+
+:
 
 ### MongoDB URI
 

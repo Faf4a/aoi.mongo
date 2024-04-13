@@ -103,7 +103,7 @@ class Database {
           }
         ],
         "white",
-        { text: " aoi.js-mongo  ", textColor: "cyan" }
+        { text: " aoi.mongo  ", textColor: "cyan" }
       );
       process.exit(0);
     }
