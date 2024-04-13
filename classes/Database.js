@@ -9,6 +9,7 @@ class Database {
   }
 
   async connect() {
+
     try {
       this.client.db = new MongoClient(this.options.url, {
         serverApi: {
@@ -106,6 +107,8 @@ class Database {
       );
       process.exit(0);
     }
+
+    if (this.options?.convertOldData == true) require("./backup")(this.client, this.options.tables);
   }
 
   async ping() {
@@ -148,11 +151,11 @@ class Database {
   async deleteMany(table, query) {
     const db = this.client.db.db(table);
     const collections = await db.listCollections().toArray();
-  
+
     for (let collection of collections) {
       const col = db.collection(collection.name);
       await col.deleteMany({ q: query });
-  
+
       const cd = await col.countDocuments();
       if (cd === 0) {
         await col.drop();
