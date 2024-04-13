@@ -1,21 +1,21 @@
-const { readFileSync, readdirSync, existsSync } = require("fs");
+const { readFileSync, readdirSync, existsSync, statSync } = require("fs");
 const { join } = require("path");
 const chalk = require("chalk");
 const ora = require("ora");
 
-module.exports = async (client, tables) => {
+module.exports = async (client, options) => {
   await new Promise((resolve) => {
     client.once("ready", () => {
       setTimeout(resolve, 5e3);
     });
   });
 
-  if (!existsSync(join(__dirname, "../../database")) || !existsSync(join(__dirname, "../../database/main"))) {
+  if (!existsSync(join(__dirname, "../../", options.convertOldData.dir))) {
     console.log("[aoi.mongo]: " + chalk.red("The 'database' and/or 'main' folder does not exist. Make sure it's in the root directory."));
     return;
   }
 
-  const files = readdirSync(join(__dirname, "../../database/main"));
+  const directories = readdirSync(join(__dirname, "../../", options.convertOldData.dir));
 
   let progress;
   let total = 0;
@@ -23,12 +23,22 @@ module.exports = async (client, tables) => {
 
   console.log("[aoi.mongo]: " + chalk.green("Starting backup process..."));
 
-  console.log(`[aoi.mongo]: Found files: ${chalk.yellow(files.length)}`);
+  for (const dir of directories) {
+    if (["reference", ".backup", "transaction"].includes(dir)) continue;
+    const dirPath = join(__dirname, "../../", options.convertOldData.dir, dir);
 
-  for (const file of files) {
-    const databaseData = readFileSync(join(__dirname, `../../database/main/${file}`));
-    const data = JSON.parse(databaseData);
-    total += Object.keys(data).length;
+    if (statSync(dirPath).isDirectory()) {
+      const files = readdirSync(dirPath);
+
+      console.log(`[aoi.mongo]: Found files in ${dir}: ${chalk.yellow(files.length)}`);
+
+      for (const file of files) {
+        const filePath = join(dirPath, file);
+        const databaseData = readFileSync(filePath);
+        const data = JSON.parse(databaseData);
+        total += Object.keys(data).length;
+      }
+    }
   }
 
   console.log(`[aoi.mongo]: Estimated time for backup: ${chalk.yellow(total * 75 / 1000)} seconds.`);
@@ -37,45 +47,57 @@ module.exports = async (client, tables) => {
 
   console.log(`[aoi.mongo]: Found ${chalk.yellow(total)} keys to transfer.`);
 
-  for (const file of files) {
-    const databaseData = readFileSync(join(__dirname, `../../database/main/${file}`));
-    const data = JSON.parse(databaseData);
+  for (const dir of directories) {
+    if (["reference", ".backup", "transaction"].includes(dir)) continue;
+    const dirPath = join(__dirname, "../../", options.convertOldData.dir, dir);
 
-    await new Promise((resolve) => setTimeout(resolve, 1e3));
+    if (statSync(dirPath).isDirectory()) {
+      const files = readdirSync(dirPath);
 
-    const db = client.db.db(tables[0]);
+      for (const file of files) {
+        const filePath = join(dirPath, file);
+        const databaseData = readFileSync(filePath);
+        const data = JSON.parse(databaseData);
 
-    await new Promise((resolve) => setTimeout(resolve, 3e3));
+        await new Promise((resolve) => setTimeout(resolve, 1e3));
 
-    progress = ora("[aoi.mongo]: Starting backup...").start();
+        const db = client.db.db(file.split("_")[0]);
 
-    for (const [key, value] of Object.entries(data)) {
-      const start = process.hrtime.bigint();
-      progress.stop();
+        console.log(`[aoi.mongo]: Transferring data from table ${chalk.yellow(file.split("_")[0])}...`)
 
-      const currentProgress = ora(`[${index}/${total}]: Processing ${chalk.yellow(key)}...`).start();
+        await new Promise((resolve) => setTimeout(resolve, 3e3));
 
-      const collection = db.collection(key.split("_")[0]);
+        progress = ora("[aoi.mongo]: Starting backup...").start();
 
-      if (!value.hasOwnProperty("value") || !key) {
-        currentProgress.fail(`[${index}/${total}]: No data found for ${chalk.yellow(key)}`);
-        continue;
+        for (const [key, value] of Object.entries(data)) {
+          const start = process.hrtime.bigint();
+          progress.stop();
+
+          const currentProgress = ora(`[${index}/${total}]: Processing ${chalk.yellow(key)}...`).start();
+
+          const collection = db.collection(key.split("_")[0]);
+
+          if (!value.hasOwnProperty("value") || !key) {
+            currentProgress.fail(`[${index}/${total}]: No data found for ${chalk.yellow(key)}`);
+            continue;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 20));
+
+          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key)} to ${chalk.cyan(value.value)}`;
+
+          await collection.insertOne({
+            key: key,
+            value: value.value
+          });
+
+          const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
+
+          currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(key)}`);
+
+          index++;
+        }
       }
-
-      await new Promise((resolve) => setTimeout(resolve, 20));
-
-      currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key)} to ${chalk.cyan(value.value)}`;
-
-      await collection.insertOne({
-        key: key,
-        value: value.value
-      });
-
-      const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
-
-      currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(key)}`);
-
-      index++;
     }
   }
 

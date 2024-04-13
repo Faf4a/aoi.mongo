@@ -108,7 +108,7 @@ class Database {
       process.exit(0);
     }
 
-    if (this.options?.convertOldData == true) require("./backup")(this.client, this.options.tables);
+    if (this.options?.convertOldData?.enabled == true) require("./backup")(this.client, this.options);
   }
 
   async ping() {
