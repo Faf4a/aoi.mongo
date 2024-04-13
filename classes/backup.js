@@ -10,12 +10,12 @@ module.exports = async (client, options) => {
     });
   });
 
-  if (!existsSync(join(__dirname, "../../", options.convertOldData.dir))) {
+  if (!existsSync(join(__dirname, "../../../", options.convertOldData.dir))) {
     console.log("[aoi.mongo]: " + chalk.red("The 'database' and/or 'main' folder does not exist. Make sure it's in the root directory."));
     return;
   }
 
-  const directories = readdirSync(join(__dirname, "../../", options.convertOldData.dir));
+  const directories = readdirSync(join(__dirname, "../../../", options.convertOldData.dir));
 
   let progress;
   let total = 0;
@@ -25,7 +25,7 @@ module.exports = async (client, options) => {
 
   for (const dir of directories) {
     if (["reference", ".backup", "transaction"].includes(dir)) continue;
-    const dirPath = join(__dirname, "../../", options.convertOldData.dir, dir);
+    const dirPath = join(__dirname, "../../../", options.convertOldData.dir, dir);
 
     if (statSync(dirPath).isDirectory()) {
       const files = readdirSync(dirPath);
@@ -49,7 +49,7 @@ module.exports = async (client, options) => {
 
   for (const dir of directories) {
     if (["reference", ".backup", "transaction"].includes(dir)) continue;
-    const dirPath = join(__dirname, "../../", options.convertOldData.dir, dir);
+    const dirPath = join(__dirname, "../../../", options.convertOldData.dir, dir);
 
     if (statSync(dirPath).isDirectory()) {
       const files = readdirSync(dirPath);
