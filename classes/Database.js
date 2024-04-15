@@ -94,7 +94,7 @@ class Database {
 
     if (this.options?.convertOldData?.enabled == true) {
       await new Promise((resolve) => {
-        client.once("ready", () => {
+        this.client.once("ready", () => {
           setTimeout(resolve, 5e3);
         });
       });
