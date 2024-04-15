@@ -118,8 +118,6 @@ class Database {
 
     const data = await col.findOne({ key: `${key}_${id}` });
 
-    console.log(data);
-
     return data || __var;
   }
 
