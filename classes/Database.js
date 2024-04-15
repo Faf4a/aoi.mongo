@@ -9,7 +9,6 @@ class Database {
   }
 
   async connect() {
-
     try {
       this.client.db = new MongoClient(this.options.url, {
         serverApi: {
@@ -33,27 +32,12 @@ class Database {
       this.client.db.findMany = this.findMany.bind(this);
       this.client.db.all = this.all.bind(this);
       this.client.db.clean = this.clean.bind(this);
+      this.client.db.db.transfer = this.transfer.bind(this);
 
       // database ping
-      this.client.db.ping = this.ping.bind(this);
-
+      this.client.db.db.avgPing = this.ping.bind(this);
       //connect
       await this.client.db.connect();
-
-      // create one function ($datebasePing -> $dbPing)
-      this.client.functionManager.createFunction({
-        name: "$dbPing",
-        type: "djs",
-        code: async (d) => {
-          const data = d.util.aoiFunc(d);
-
-          data.result = await d.client.db.ping();
-
-          return {
-            code: d.util.setCode(data)
-          };
-        }
-      });
 
       //cleanup
       if (this.options?.cleanup?.enabled == true) {
@@ -67,7 +51,7 @@ class Database {
       }
 
       if (this.options.logging != false) {
-        const latency = await this.client.db.ping();
+        const latency = await this.client.db.db.avgPing();
         const { version } = require("../package.json");
         if (latency != "-1") {
           AoiError.createCustomBoxedMessage(
@@ -108,7 +92,14 @@ class Database {
       process.exit(0);
     }
 
-    if (this.options?.convertOldData?.enabled == true) require("./backup")(this.client, this.options);
+    if (this.options?.convertOldData?.enabled == true) {
+      await new Promise((resolve) => {
+        client.once("ready", () => {
+          setTimeout(resolve, 5e3);
+        });
+      });
+      require("./backup")(this.client, this.options);
+    }
   }
 
   async ping() {
@@ -121,11 +112,13 @@ class Database {
   async get(table, key, id) {
     const col = this.client.db.db(table).collection(key);
 
-    if (!this.client.variableManager.has(key, table) && table !== "__aoijs_vars__") return;
+    if (!this.client.variableManager.has(key, table)) return;
 
     const __var = this.client.variableManager.get(key, table)?.default;
 
     const data = await col.findOne({ key: `${key}_${id}` });
+
+    console.log(data);
 
     return data || __var;
   }
@@ -170,7 +163,7 @@ class Database {
     let dkey = `${key}_${id}`;
     if (table === "__aoijs_vars__" && typeof key === "number") {
       dkey = `setTimeout_${key}`;
-    } 
+    }
 
     if (table === "__aoijs_vars__" && key === "ticketChannel") {
       dkey = `ticketChannel_${id}`;
@@ -257,6 +250,10 @@ class Database {
 
       if (__col === 0) await collection.drop();
     }
+  }
+
+  async transfer() {
+    require("./backup")(this.client, this.options);
   }
 }
 

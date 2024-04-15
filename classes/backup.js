@@ -4,12 +4,6 @@ const chalk = require("chalk");
 const ora = require("ora");
 
 module.exports = async (client, options) => {
-  await new Promise((resolve) => {
-    client.once("ready", () => {
-      setTimeout(resolve, 5e3);
-    });
-  });
-
   if (!existsSync(join(__dirname, "../../../", options.convertOldData.dir))) {
     console.log("[aoi.mongo]: " + chalk.red("The 'database' and/or 'main' folder does not exist. Make sure it's in the root directory."));
     return;
@@ -74,7 +68,7 @@ module.exports = async (client, options) => {
           progress.stop();
 
           const currentProgress = ora(`[${index}/${total}]: Processing ${chalk.yellow(key)}...`).start();
-
+          
           const matches = key.match(/(.*?)(_\d+)(.*)/);
           let text;
 
@@ -82,22 +76,22 @@ module.exports = async (client, options) => {
             let [_, matchedText, numbers, rest] = matches;
             text = matchedText;
           } else {
-            text = key;
+            text = key.replace("_undefined", "");
           }
           
           const collection = db.collection(text);
 
           if (!value.hasOwnProperty("value") || !key) {
-            currentProgress.fail(`[${index}/${total}]: No data found for ${chalk.yellow(key)}`);
+            currentProgress.fail(`[${index}/${total}]: No data found for ${chalk.yellow(key.replace("_undefined", ""))}`);
             continue;
           }
 
           await new Promise((resolve) => setTimeout(resolve, 20));
 
-          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key)} to ${chalk.cyan(value.value)}`;
+          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key.replace("_undefined", ""))} to ${chalk.cyan(value.value)}`;
 
           await collection.insertOne({
-            key: key,
+            key: key.replace("_undefined", ""),
             value: value.value
           });
 
