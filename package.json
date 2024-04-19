@@ -1,6 +1,6 @@
 {
   "name": "aoi.mongo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Package which brings MongoDB support to aoi.js",
   "main": "./classes/Database.js",
   "license": "ISC",

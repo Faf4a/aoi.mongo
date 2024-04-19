@@ -15,7 +15,8 @@ class Database {
           version: ServerApiVersion.v1,
           strict: true,
           deprecationErrors: false
-        }
+        },
+        connectTimeoutMS: 15000
       });
 
       if (!this.options.tables || this.options?.tables.length === 0) throw new TypeError("Missing variable tables, please provide at least one table.");
@@ -40,6 +41,7 @@ class Database {
       await this.client.db.connect();
 
       //cleanup
+      /* -- Should do this by default when removing keys from collection
       if (this.options?.cleanup?.enabled == true) {
         const duration = this.options?.cleanup?.duration ?? 7200000;
         const collection = "__aoijs_vars__";
@@ -49,6 +51,7 @@ class Database {
           await this.client.db.clean(collection);
         }, duration);
       }
+      */
 
       if (this.options.logging != false) {
         const latency = await this.client.db.db.avgPing();
@@ -109,16 +112,21 @@ class Database {
     return Date.now() - start;
   }
 
-  async get(table, key, id) {
+  async get(table, key, id = undefined) {
+    if (!key || !table) return new TypeError("get() requires a key/table to get the value from.");
+
     const col = this.client.db.db(table).collection(key);
+    const aoijs_vars = ["cooldown", "setTimeout", "ticketChannel"];
 
-    if (!this.client.variableManager.has(key, table)) return;
-
-    const __var = this.client.variableManager.get(key, table)?.default;
-
-    const data = await col.findOne({ key: `${key}_${id}` });
-
-    return data || __var;
+    if (aoijs_vars.includes(key)) {
+      const data = await col.findOne({ key: `${key}_${id}` });
+      return data || null;
+    } else {
+      if (!this.client.variableManager.has(key, table)) return;
+      const __var = this.client.variableManager.get(key, table)?.default;
+      const data = await col.findOne({ key: `${key}_${id}` });
+      return data || __var;
+    }
   }
 
   async set(table, key, id, value) {
@@ -158,21 +166,14 @@ class Database {
     const db = this.client.db.db(table);
     const collections = await db.listCollections().toArray();
 
-    let dkey = `${key}_${id}`;
-    if (table === "__aoijs_vars__" && typeof key === "number") {
-      dkey = `setTimeout_${key}`;
-    }
-
-    if (table === "__aoijs_vars__" && key === "ticketChannel") {
-      dkey = `ticketChannel_${id}`;
-    }
+    const dbkey = `${key}_${id}`;
 
     for (let collection of collections) {
       const col = db.collection(collection.name);
-      const doc = await col.findOne({ key: dkey });
+      const doc = await col.findOne({ key: dbkey });
 
       if (doc) {
-        await col.deleteOne({ key: dkey });
+        await col.deleteOne({ key: dbkey });
 
         if ((await col.countDocuments({})) === 0) await col.drop();
 
