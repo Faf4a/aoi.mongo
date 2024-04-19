@@ -53,19 +53,20 @@ module.exports = async (client, options) => {
         const databaseData = readFileSync(filePath);
         const data = JSON.parse(databaseData);
 
+        progress = ora("[aoi.mongo]: Getting ready to backup (this may take a while depending on the amount of data)...\n\r").start();
+
         await new Promise((resolve) => setTimeout(resolve, 1e3));
 
         const db = client.db.db(file.split("_scheme_")[0]);
 
-        console.log(`[aoi.mongo]: Transferring data from table ${chalk.yellow(file.split("_scheme_")[0])}...`);
+        progress.text = `[aoi.mongo]: Transferring data from table ${chalk.yellow(file.split("_scheme_")[0])}...`;
 
         await new Promise((resolve) => setTimeout(resolve, 3e3));
 
-        progress = ora("[aoi.mongo]: Starting backup...").start();
+        progress.stop();
 
         for (const [key, value] of Object.entries(data)) {
           const start = process.hrtime.bigint();
-          progress.stop();
 
           const currentProgress = ora(`[${index}/${total}]: Processing ${chalk.yellow(key)}...`).start();
 
@@ -88,7 +89,7 @@ module.exports = async (client, options) => {
 
           await new Promise((resolve) => setTimeout(resolve, 20));
 
-          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key)} to ${chalk.cyan(value.value)}`;
+          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key)} to '${chalk.cyan(value.value).slice(0, 15)}'`;
 
           await collection.insertOne({
             key: key,

@@ -113,20 +113,18 @@ class Database {
   }
 
   async get(table, key, id = undefined) {
-    if (!key || !table) return new TypeError("get() requires a key/table to get the value from.");
-
     const col = this.client.db.db(table).collection(key);
     const aoijs_vars = ["cooldown", "setTimeout", "ticketChannel"];
 
+    let data;
     if (aoijs_vars.includes(key)) {
-      const data = await col.findOne({ key: `${key}_${id}` });
-      return data || null;
+      data = await col.findOne({ key: `${key}_${id}` });
     } else {
       if (!this.client.variableManager.has(key, table)) return;
       const __var = this.client.variableManager.get(key, table)?.default;
-      const data = await col.findOne({ key: `${key}_${id}` });
-      return data || __var;
+      data = (await col.findOne({ key: `${key}_${id}` })) || __var;
     }
+    return data;
   }
 
   async set(table, key, id, value) {
