@@ -4,6 +4,7 @@ class Database {
   constructor(client, options) {
     this.client = client;
     this.options = options;
+    this.debug = this.options.debug ?? false;
 
     this.connect();
   }
@@ -116,6 +117,10 @@ class Database {
     const col = this.client.db.db(table).collection(key);
     const aoijs_vars = ["cooldown", "setTimeout", "ticketChannel"];
 
+    if (this.debug == true) {
+      console.log(`[received] get(${table}, ${key}, ${id})`);
+    }
+
     let data;
     if (aoijs_vars.includes(key)) {
       data = await col.findOne({ key: `${key}_${id}` });
@@ -124,12 +129,24 @@ class Database {
       const __var = this.client.variableManager.get(key, table)?.default;
       data = (await col.findOne({ key: `${key}_${id}` })) || __var;
     }
+
+    if (this.debug == true) {
+      console.log(`[returning] get(${table}, ${key}, ${id}) -> ${typeof data === "object" ? JSON.stringify(data) : data }`);
+    }
+
     return data;
   }
 
   async set(table, key, id, value) {
+
+    if (this.debug == true) {
+      console.log(`[received] set(${table}, ${key}, ${id}, ${typeof value === "object" ? JSON.stringify(value) : value })`);
+    }
     const col = this.client.db.db(table).collection(key);
-    await col.updateOne({ key: `${key}_${id}` }, { $set: { value: value } }, { upsert: true });
+    const data = await col.updateOne({ key: `${key}_${id}` }, { $set: { value: value } }, { upsert: true });
+    if (this.debug == true) {
+      console.log(`[returning] set(${table}, ${key}, ${id}, ${value}) ->${typeof value === "object" ? JSON.stringify(value) : value }`);
+    }
   }
 
   async drop(table, variable) {
