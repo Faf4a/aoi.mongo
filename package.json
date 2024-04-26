@@ -1,10 +1,11 @@
 {
   "name": "aoi.mongo",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Package which brings MongoDB support to aoi.js",
   "main": "./classes/Database.js",
   "license": "ISC",
   "dependencies": {
+    "chalk": "^5.3.0",
     "mongodb": "^6.3.0",
     "ora": "^5.4.1"
   }

@@ -1,6 +1,6 @@
 const { readFileSync, readdirSync, existsSync, statSync } = require("fs");
 const { join } = require("path");
-const chalk = require("chalk");
+const chalk = (await import("chalk"));
 const ora = require("ora");
 
 module.exports = async (client, options) => {
