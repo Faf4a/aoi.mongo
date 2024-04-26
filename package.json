@@ -5,7 +5,7 @@
   "main": "./classes/Database.js",
   "license": "ISC",
   "dependencies": {
-    "chalk": "^5.3.0",
+    "chalk": "^4.1.2",
     "mongodb": "^6.3.0",
     "ora": "^5.4.1"
   }
