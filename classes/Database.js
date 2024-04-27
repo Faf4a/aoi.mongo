@@ -218,9 +218,9 @@ class Database {
     const db = this.client.db.db(table);
     const collections = await db.listCollections().toArray();
     let results = [];
-
-    console.log(`[received] all(${table}, ${filter}, ${list}, ${sort})`);
-
+    if (this.debug == true) {
+      console.log(`[received] all(${table}, ${filter}, ${list}, ${sort})`);
+    }
     for (let collection of collections) {
       const col = db.collection(collection.name);
       let data = await col.find({}).toArray();
@@ -233,8 +233,9 @@ class Database {
     } else if (sort === "desc") {
       results.sort((a, b) => b.value - a.value);
     }
-
-    console.log(`[returning] all(${table}, ${filter}, ${list}, ${sort}) -> ${JSON.stringify(results)} items`);
+    if (this.debug == true) {
+      console.log(`[returning] all(${table}, ${filter}, ${list}, ${sort}) -> ${JSON.stringify(results)} items`);
+    }
     return results.slice(0, list);
   }
 
