@@ -91,14 +91,18 @@ module.exports = async (client, options) => {
 
           currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key)} to '${chalk.cyan(value.value).slice(0, 15)}'`;
 
-          await collection.insertOne({
+          const res = await collection.insertOne({
             key: key,
             value: value.value
           });
 
-          const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
+          if (res.acknowledged) {
+            const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
 
-          currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(key)}`);
+            currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(key)} ${options.convertOldData.acknowledge ? "acknowledged write?: " + res.acknowledged : ""}`);
+          } else {
+            currentProgress.fail(`[${index}/${total}]: Failed to write ${chalk.yellow(key)}`);
+          }
 
           index++;
         }
