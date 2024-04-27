@@ -33,26 +33,10 @@ class Database {
       this.client.db.findOne = this.findOne.bind(this);
       this.client.db.findMany = this.findMany.bind(this);
       this.client.db.all = this.all.bind(this);
-      this.client.db.clean = this.clean.bind(this);
       this.client.db.db.transfer = this.transfer.bind(this);
-
-      // database ping
       this.client.db.db.avgPing = this.ping.bind(this);
-      //connect
+
       await this.client.db.connect();
-
-      //cleanup
-      /* -- Should do this by default when removing keys from collection
-      if (this.options?.cleanup?.enabled == true) {
-        const duration = this.options?.cleanup?.duration ?? 7200000;
-        const collection = "__aoijs_vars__";
-
-        if (typeof duration !== "number" || duration <= 0) throw new TypeError(`Invalid cleanup duration provided in "${duration}"`);
-        setInterval(async () => {
-          await this.client.db.clean(collection);
-        }, duration);
-      }
-      */
 
       if (this.options.logging != false) {
         const latency = await this.client.db.db.avgPing();
@@ -131,30 +115,36 @@ class Database {
     }
 
     if (this.debug == true) {
-      console.log(`[returning] get(${table}, ${key}, ${id}) -> ${typeof data === "object" ? JSON.stringify(data) : data }`);
+      console.log(`[returning] get(${table}, ${key}, ${id}) -> ${typeof data === "object" ? JSON.stringify(data) : data}`);
     }
 
     return data;
   }
 
   async set(table, key, id, value) {
-
     if (this.debug == true) {
-      console.log(`[received] set(${table}, ${key}, ${id}, ${typeof value === "object" ? JSON.stringify(value) : value })`);
+      console.log(`[received] set(${table}, ${key}, ${id}, ${typeof value === "object" ? JSON.stringify(value) : value})`);
     }
-    
+
     const col = this.client.db.db(table).collection(key);
     await col.updateOne({ key: `${key}_${id}` }, { $set: { value: value } }, { upsert: true });
     if (this.debug == true) {
-      console.log(`[returning] set(${table}, ${key}, ${id}, ${value}) ->${typeof value === "object" ? JSON.stringify(value) : value }`);
+      console.log(`[returning] set(${table}, ${key}, ${id}, ${value}) ->${typeof value === "object" ? JSON.stringify(value) : value}`);
     }
   }
 
   async drop(table, variable) {
+    if (this.debug == true) {
+      console.log(`[received] drop(${table}, ${variable})`);
+    }
     if (variable) {
       await this.client.db.db(table).collection(variable).drop();
     } else {
       await this.client.db.db(table).dropDatabase();
+    }
+
+    if (this.debug == true) {
+      console.log(`[returning] drop(${table}, ${variable}) -> dropped ${table}`);
     }
   }
 
@@ -173,7 +163,7 @@ class Database {
 
       const cd = await col.countDocuments();
       if (cd === 0) {
-        await col.drop();
+        await col.drop(table);
       }
     }
   }
@@ -191,7 +181,7 @@ class Database {
       if (doc) {
         await col.deleteOne({ key: dbkey });
 
-        if ((await col.countDocuments({})) === 0) await col.drop();
+        if ((await col.countDocuments({})) === 0) await col.drop(table, key);
 
         break;
       }
@@ -246,28 +236,6 @@ class Database {
 
     console.log(`[returning] all(${table}, ${filter}, ${list}, ${sort}) -> ${JSON.stringify(results)} items`);
     return results.slice(0, list);
-  }
-
-  //cooldown collection clean
-
-  async clean(__collection) {
-    const db = this.client.db.db(__collection);
-    const collections = await db.listCollections().toArray();
-
-    for (const col of collections) {
-      const collection = db.collection(col.name);
-
-      const __items = await collection.find({ _v: { $lt: Date.now() } }).toArray();
-
-      if (__items.length > 0) {
-        const __id = __items.map((item) => item._id);
-        await collection.deleteMany({ _id: { $in: __id } });
-      }
-
-      const __col = await collection.countDocuments();
-
-      if (__col === 0) await collection.drop();
-    }
   }
 
   async transfer() {
