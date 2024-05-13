@@ -42,7 +42,7 @@ class Database {
         const latency = await this.client.db.db.avgPing();
         const { version } = require("../package.json");
         if (latency != "-1") {
-          AoiError.createCustomBoxedMessage(
+          AoiError.createConsoleMessage(
             [
               {
                 text: `Successfully connected to MongoDB`,
@@ -63,7 +63,7 @@ class Database {
         }
       }
     } catch (err) {
-      AoiError.createCustomBoxedMessage(
+      AoiError.createConsoleMessage(
         [
           {
             text: `Failed to connect to MongoDB`,
