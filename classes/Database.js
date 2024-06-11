@@ -122,7 +122,7 @@ class Database {
   }
 
   async set(table, key, id, value) {
-    const sanitizedValue = value.replace(/\n/g, "\\n")
+    const sanitizedValue = typeof value === "string" ? value.replace(/\n/g, "\\n") : string;
     if (this.debug == true) {
       console.log(`[received] set(${table}, ${key}, ${id}, ${sanitizedValue})`);
     }
