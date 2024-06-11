@@ -122,14 +122,15 @@ class Database {
   }
 
   async set(table, key, id, value) {
+    const sanitizedValue = value.replace(/\n/g, "\\n")
     if (this.debug == true) {
-      console.log(`[received] set(${table}, ${key}, ${id}, ${typeof value === "object" ? JSON.stringify(value) : value})`);
+      console.log(`[received] set(${table}, ${key}, ${id}, ${sanitizedValue})`);
     }
 
     const col = this.client.db.db(table).collection(key);
-    await col.updateOne({ key: `${key}_${id}` }, { $set: { value: value } }, { upsert: true });
+    await col.updateOne({ key: `${key}_${id}` }, { $set: { value: sanitizedValue } }, { upsert: true });
     if (this.debug == true) {
-      console.log(`[returning] set(${table}, ${key}, ${id}, ${value}) ->${typeof value === "object" ? JSON.stringify(value) : value}`);
+      console.log(`[returning] set(${table}, ${key}, ${id}, ${sanitizedValue})`);
     }
   }
 
