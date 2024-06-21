@@ -71,7 +71,9 @@ client.variables({
 // rest of your index.js..
 ```
 
-:
+### Want to keep aoi.db?
+
+Then use https://github.com/NanotechPikachu/aoi.mongodb this version made by [NanotechPikachu](https://github.com/NanotechPikachu)!
 
 ### MongoDB URI
 
