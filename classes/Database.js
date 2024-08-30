@@ -1,5 +1,6 @@
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const AoiError = require("aoi.js/src/classes/AoiError");
+const Interpreter = require("aoi.js/src/core/interpreter.js");
 class Database {
   constructor(client, options) {
     this.client = client;
@@ -36,6 +37,8 @@ class Database {
       this.client.db.db.transfer = this.transfer.bind(this);
       this.client.db.db.avgPing = this.ping.bind(this);
 
+      this.client.db.db.readyAt = Date.now();
+
       await this.client.db.connect();
 
       if (this.options.logging != false) {
@@ -62,6 +65,16 @@ class Database {
           );
         }
       }
+
+      const client = this.client;
+
+      this.client.once("ready", async () => {
+        await require("aoi.js/src/events/Custom/timeout.js")({ client, interpreter: Interpreter }, undefined, undefined, true);
+
+        setInterval(async () => {
+          await require("aoi.js/src/events/Custom/handleResidueData.js")(client);
+        }, 3.6e6);
+      });
     } catch (err) {
       AoiError.createConsoleMessage(
         [
@@ -81,12 +94,9 @@ class Database {
     }
 
     if (this.options?.convertOldData?.enabled == true) {
-      await new Promise((resolve) => {
-        this.client.once("ready", () => {
-          setTimeout(resolve, 5e3);
-        });
+      this.client.once("ready", () => {
+        require("./backup")(this.client, this.options);
       });
-      require("./backup")(this.client, this.options);
     }
   }
 
@@ -154,25 +164,36 @@ class Database {
   }
 
   async deleteMany(table, query) {
+    if (this.debug == true) {
+      console.log(`[received] deleteMany(${table}, ${query})`);
+    }
+
     const db = this.client.db.db(table);
     const collections = await db.listCollections().toArray();
 
     for (let collection of collections) {
       const col = db.collection(collection.name);
-      await col.deleteMany({ q: query });
-
-      const cd = await col.countDocuments();
-      if (cd === 0) {
-        await col.drop(table);
+      if (this.debug == true) {
+        const data = await col.find({ q: query }).toArray();
+        console.log(`[returning] deleteMany(${table}, ${query}) -> ${data}`);
       }
+  
+      await col.deleteMany({ q: query });
+    }
+    if (this.debug == true) {
+      console.log(`[returning] deleteMany(${table}, ${query}) -> deleted`);
     }
   }
 
   async delete(table, key, id) {
+    if (this.debug == true) {
+      console.log(`[received] delete(${table}, ${key}_${id})`);
+    }
     const db = this.client.db.db(table);
     const collections = await db.listCollections().toArray();
+    let dbkey = key;
 
-    const dbkey = `${key}_${id}`;
+    if (id) dbkey = `${key}_${id}`;
 
     for (let collection of collections) {
       const col = db.collection(collection.name);
@@ -180,11 +201,11 @@ class Database {
 
       if (doc) {
         await col.deleteOne({ key: dbkey });
-
-        if ((await col.countDocuments({})) === 0) await col.drop(table, key);
-
         break;
       }
+    }
+    if (this.debug == true) {
+      console.log(`[returned] delete(${table}, ${key}_${id}) -> deleted`);
     }
   }
 
