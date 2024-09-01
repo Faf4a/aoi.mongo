@@ -137,9 +137,12 @@ class Database {
     }
 
     const col = this.client.db.db(table).collection(key);
-    await col.updateOne({ key: `${key}_${id}` }, { $set: { value: value } }, { upsert: true });
+    if (!id) key = key;
+    else key = `${key}_${id}`;
+
+    await col.updateOne({ key }, { $set: { value: value } }, { upsert: true });
     if (this.debug == true) {
-      console.log(`[returning] set(${table}, ${key}, ${id}, ${value}) ->${typeof value === "object" ? JSON.stringify(value) : value}`);
+      console.log(`[returning] set(${table}, ${key}, ${id}, ${value}) -> ${typeof value === "object" ? JSON.stringify(value) : value}`);
     }
   }
 
@@ -186,26 +189,30 @@ class Database {
   }
 
   async delete(table, key, id) {
+    if (id) key = `${key}_${id}`;
+    else key = key;
+
     if (this.debug == true) {
-      console.log(`[received] delete(${table}, ${key}_${id})`);
+      console.log(`[received] delete(${table}, ${key})`);
     }
     const db = this.client.db.db(table);
     const collections = await db.listCollections().toArray();
-    let dbkey = key;
-
-    if (id) dbkey = `${key}_${id}`;
 
     for (let collection of collections) {
       const col = db.collection(collection.name);
-      const doc = await col.findOne({ key: dbkey });
+      const doc = await col.findOne({ key });
+
+      if (this.debug == true) {
+        console.log(`[returning] delete(${table}, ${key}) -> ${doc.value}`);
+      }
 
       if (doc) {
-        await col.deleteOne({ key: dbkey });
+        await col.deleteOne({ key });
         break;
       }
     }
     if (this.debug == true) {
-      console.log(`[returned] delete(${table}, ${key}_${id}) -> deleted`);
+      console.log(`[returned] delete(${table}, ${key}) -> deleted`);
     }
   }
 
