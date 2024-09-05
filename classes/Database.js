@@ -1,8 +1,11 @@
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const AoiError = require("aoi.js/src/classes/AoiError");
 const Interpreter = require("aoi.js/src/core/interpreter.js");
-class Database {
+const EventEmitter = require("events");
+class Database extends EventEmitter {
   constructor(client, options) {
+    super();
+
     this.client = client;
     this.options = options;
     this.debug = this.options.debug ?? false;
@@ -75,6 +78,8 @@ class Database {
           await require("aoi.js/src/events/Custom/handleResidueData.js")(client);
         }, 3.6e6);
       });
+
+      this.emit("ready", { client: this.client });
     } catch (err) {
       AoiError.createConsoleMessage(
         [
@@ -110,45 +115,48 @@ class Database {
   async get(table, key, id = undefined) {
     const col = this.client.db.db(table).collection(key);
     const aoijs_vars = ["cooldown", "setTimeout", "ticketChannel"];
+    let keyValue = key;
+    if (id) keyValue = `${key}_${id}`;
 
     if (this.debug == true) {
-      console.log(`[received] get(${table}, ${key}, ${id})`);
+      console.debug(`[received] get(${table}, ${keyValue})`);
     }
 
     let data;
     if (aoijs_vars.includes(key)) {
-      data = await col.findOne({ key: `${key}_${id}` });
+      data = await col.findOne({ key: keyValue });
     } else {
       if (!this.client.variableManager.has(key, table)) return;
       const __var = this.client.variableManager.get(key, table)?.default;
-      data = (await col.findOne({ key: `${key}_${id}` })) || __var;
+      data = (await col.findOne({ key: keyValue })) || __var;
     }
 
     if (this.debug == true) {
-      console.log(`[returning] get(${table}, ${key}, ${id}) -> ${typeof data === "object" ? JSON.stringify(data) : data}`);
+      console.debug(`[returning] get(${table}, ${keyValue}) -> ${typeof data === "object" ? JSON.stringify(data) : data}`);
     }
 
     return data;
   }
 
   async set(table, key, id, value) {
-    if (this.debug == true) {
-      console.log(`[received] set(${table}, ${key}, ${id}, ${typeof value === "object" ? JSON.stringify(value) : value})`);
+    let keyValue = key;
+    if (id) keyValue = `${key}_${id}`;
+
+    if (this.debug === true) {
+      console.debug(`[received] set(${table}, ${keyValue}, ${typeof value === "object" ? JSON.stringify(value) : value})`);
     }
 
     const col = this.client.db.db(table).collection(key);
-    if (!id) key = key;
-    else key = `${key}_${id}`;
+    await col.updateOne({ key: keyValue }, { $set: { value: value } }, { upsert: true });
 
-    await col.updateOne({ key }, { $set: { value: value } }, { upsert: true });
-    if (this.debug == true) {
-      console.log(`[returning] set(${table}, ${key}, ${id}, ${value}) -> ${typeof value === "object" ? JSON.stringify(value) : value}`);
+    if (this.debug === true) {
+      console.debug(`[returning] set(${table}, ${keyValue}, ${typeof value === "object" ? JSON.stringify(value) : value})`);
     }
   }
 
   async drop(table, variable) {
     if (this.debug == true) {
-      console.log(`[received] drop(${table}, ${variable})`);
+      console.debug(`[received] drop(${table}, ${variable})`);
     }
     if (variable) {
       await this.client.db.db(table).collection(variable).drop();
@@ -157,7 +165,7 @@ class Database {
     }
 
     if (this.debug == true) {
-      console.log(`[returning] drop(${table}, ${variable}) -> dropped ${table}`);
+      console.debug(`[returning] drop(${table}, ${variable}) -> dropped ${table}`);
     }
   }
 
@@ -168,7 +176,7 @@ class Database {
 
   async deleteMany(table, query) {
     if (this.debug == true) {
-      console.log(`[received] deleteMany(${table}, ${query})`);
+      console.debug(`[received] deleteMany(${table}, ${query})`);
     }
 
     const db = this.client.db.db(table);
@@ -178,13 +186,13 @@ class Database {
       const col = db.collection(collection.name);
       if (this.debug == true) {
         const data = await col.find({ q: query }).toArray();
-        console.log(`[returning] deleteMany(${table}, ${query}) -> ${data}`);
+        console.debug(`[returning] deleteMany(${table}, ${query}) -> ${data}`);
       }
-  
+
       await col.deleteMany({ q: query });
     }
     if (this.debug == true) {
-      console.log(`[returning] deleteMany(${table}, ${query}) -> deleted`);
+      console.debug(`[returning] deleteMany(${table}, ${query}) -> deleted`);
     }
   }
 
@@ -193,7 +201,7 @@ class Database {
     else key = key;
 
     if (this.debug == true) {
-      console.log(`[received] delete(${table}, ${key})`);
+      console.debug(`[received] delete(${table}, ${key})`);
     }
     const db = this.client.db.db(table);
     const collections = await db.listCollections().toArray();
@@ -202,17 +210,17 @@ class Database {
       const col = db.collection(collection.name);
       const doc = await col.findOne({ key });
 
+      if (!doc) continue;
+
       if (this.debug == true) {
-        console.log(`[returning] delete(${table}, ${key}) -> ${doc.value}`);
+        console.debug(`[returning] delete(${table}, ${key}) -> ${doc.value}`);
       }
 
-      if (doc) {
-        await col.deleteOne({ key });
-        break;
-      }
+      await col.deleteOne({ key });
+      break;
     }
     if (this.debug == true) {
-      console.log(`[returned] delete(${table}, ${key}) -> deleted`);
+      console.debug(`[returned] delete(${table}, ${key}) -> deleted`);
     }
   }
 
@@ -247,7 +255,7 @@ class Database {
     const collections = await db.listCollections().toArray();
     let results = [];
     if (this.debug == true) {
-      console.log(`[received] all(${table}, ${filter}, ${list}, ${sort})`);
+      console.debug(`[received] all(${table}, ${filter}, ${list}, ${sort})`);
     }
     for (let collection of collections) {
       const col = db.collection(collection.name);
@@ -262,7 +270,7 @@ class Database {
       results.sort((a, b) => b.value - a.value);
     }
     if (this.debug == true) {
-      console.log(`[returning] all(${table}, ${filter}, ${list}, ${sort}) -> ${JSON.stringify(results)} items`);
+      console.debug(`[returning] all(${table}, ${filter}, ${list}, ${sort}) -> ${JSON.stringify(results)} items`);
     }
     return results.slice(0, list);
   }
