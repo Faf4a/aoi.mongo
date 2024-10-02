@@ -91,6 +91,9 @@ Then paste it in the **URL** field of the database setup, and you're pretty much
 
 #### Server Connection Timeout
 
+> [!IMPORTANT]
+> This is NOT recommended to do as it'll allow anyone to connect to your database. Only do this if your host changes your IP regularly. Otherwise provide the specific IP or a wildcard!
+
 - Make sure you allowed ALL IPS to connect to your mongoDB server.
 
 `Security` -> `Network Access` -> `Allow all IPs`
